@@ -1,0 +1,90 @@
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local LogService = game:GetService("LogService")
+
+local player = Players.LocalPlayer
+local currentJobId = game.JobId  -- Store current server ID
+
+-- Exclusion lists
+local excludedUsernames = {
+    ["AEmojiboy29"] = true,
+}
+
+local excludedUserIds = {
+    [123456789] = true, -- Replace with actual UserId of AEmojiboy29 if known
+}
+
+-- GUI setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "RoundCounterGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local roundLabel = Instance.new("TextLabel")
+roundLabel.Size = UDim2.new(0, 200, 0, 50)
+roundLabel.Position = UDim2.new(0.5, -100, 0, 50)
+roundLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+roundLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+roundLabel.TextScaled = true
+roundLabel.Text = "Rounds: 0"
+roundLabel.Active = true
+roundLabel.Draggable = true
+roundLabel.Parent = screenGui
+
+-- Round counter
+local rounds = 0
+local maxRounds = 11
+local rejoining = false
+
+-- Function to safely increment rounds
+local function incrementRounds()
+    rounds += 1
+    roundLabel.Text = "Rounds: " .. rounds
+
+    if rounds >= maxRounds and not rejoining then
+        if excludedUsernames[player.Name] or excludedUserIds[player.UserId] then
+            print("[Detector] Player excluded from rejoining: " .. player.Name)
+            return
+        end
+
+        rejoining = true
+        print("[Detector] " .. maxRounds .. " rounds reached! Rejoining same server...")
+
+        task.delay(1, function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, currentJobId, player)
+        end)
+    end
+end
+
+-- Listen to all console output
+LogService.MessageOut:Connect(function(message, messageType)
+    if message:find("LOAD PROGRESS") then
+        print("[Detector] LOAD PROGRESS detected!")
+        incrementRounds()
+    end
+end)
+
+-- Character check for HumanoidRootPart
+player.CharacterAdded:Connect(function(character)
+    local root = character:WaitForChild("HumanoidRootPart", 5)
+
+    if not root and not rejoining then
+        if excludedUsernames[player.Name] or excludedUserIds[player.UserId] then
+            print("[Detector] Player excluded from rejoining: " .. player.Name)
+            return
+        end
+
+        rejoining = true
+        warn("[Detector] Geen HumanoidRootPart gevonden — speler wordt opnieuw verbonden.")
+
+        task.delay(1, function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, currentJobId, player)
+        end)
+    end
+end)
+
+-- Optional: reset on teleport
+player.OnTeleport:Connect(function()
+    rounds = 0
+    rejoining = false
+end)
