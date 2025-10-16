@@ -1,0 +1,164 @@
+-- Place this in StarterPlayerScripts or StarterGui as a LocalScript
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local LogService = game:GetService("LogService")
+
+local player = Players.LocalPlayer
+local currentJobId = game.JobId
+
+-- Excluded players (won't auto-rejoin)
+local excludedUsernames = {
+    ["AEmojiboy29"] = true,
+}
+
+local excludedUserIds = {
+    [905643887] = true,
+}
+
+-- Wait for player to be fully loaded
+if not player then
+    player = Players.PlayerAdded:Wait()
+end
+
+-- Create GUI elements first
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "RoundCounterGui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.DisplayOrder = 10
+
+local roundLabel = Instance.new("TextLabel")
+roundLabel.Size = UDim2.new(0, 200, 0, 50)
+roundLabel.Position = UDim2.new(0.5, -100, 0, 10)
+roundLabel.AnchorPoint = Vector2.new(0.5, 0)
+roundLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+roundLabel.BackgroundTransparency = 0.2
+roundLabel.BorderSizePixel = 0
+roundLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+roundLabel.TextScaled = true
+roundLabel.Text = "Rounds: 0"
+roundLabel.Active = true
+roundLabel.Draggable = true
+roundLabel.Font = Enum.Font.GothamBold
+
+-- Add corner for better look
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = roundLabel
+
+-- Add stroke for better visibility
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(100, 100, 100)
+stroke.Thickness = 2
+stroke.Parent = roundLabel
+
+roundLabel.Parent = screenGui
+
+local rounds = 0
+local maxRounds = 10
+local rejoining = false
+
+-- Function to safely parent GUI
+local function setupGUI()
+    local success, errorMsg = pcall(function()
+        local playerGui = player:WaitForChild("PlayerGui")
+        
+        -- Remove existing GUI if it exists
+        local existingGui = playerGui:FindFirstChild("RoundCounterGui")
+        if existingGui then
+            existingGui:Destroy()
+        end
+        
+        screenGui.Parent = playerGui
+        print("Round Counter GUI loaded successfully!")
+    end)
+    
+    if not success then
+        warn("Failed to setup GUI: " .. tostring(errorMsg))
+        -- Retry after a short delay
+        task.delay(3, setupGUI)
+    end
+end
+
+-- Safe teleport function
+local function safeTeleport()
+    if excludedUsernames[player.Name] or excludedUserIds[player.UserId] then
+        return
+    end
+    
+    rejoining = true
+    roundLabel.Text = "Rejoining..."
+    roundLabel.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    
+    -- Small delay before teleporting
+    task.delay(2, function()
+        local success = pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, currentJobId, player)
+        end)
+        if not success then
+            roundLabel.Text = "Teleport Failed!"
+            task.delay(3, function()
+                rejoining = false
+                roundLabel.Text = "Rounds: " .. rounds
+            end)
+        end
+    end)
+end
+
+-- Increment rounds function
+local function incrementRounds()
+    rounds += 1
+    roundLabel.Text = "Rounds: " .. rounds
+    
+    -- Change color based on rounds
+    if rounds >= maxRounds - 2 then
+        roundLabel.BackgroundColor3 = Color3.fromRGB(200, 100, 50)  -- Orange warning
+    else
+        roundLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)   -- Normal
+    end
+    
+    if rounds >= maxRounds and not rejoining then
+        safeTeleport()
+    end
+end
+
+-- Set up GUI when player is ready
+task.spawn(function()
+    -- Wait for everything to load
+    task.wait(2)
+    setupGUI()
+end)
+
+-- Listen for round progress messages
+LogService.MessageOut:Connect(function(message, messageType)
+    if string.find(message, "LOAD PROGRESS") then
+        incrementRounds()
+    end
+end)
+
+-- Handle teleport events
+player.OnTeleport:Connect(function(teleportState)
+    if teleportState == Enum.TeleportState.Started then
+        rounds = 0
+        rejoining = false
+    end
+end)
+
+-- Handle character respawn (in case GUI gets removed)
+player.CharacterAdded:Connect(function()
+    task.wait(2) -- Wait a bit for everything to load
+    if not screenGui or not screenGui.Parent then
+        setupGUI()
+    end
+end)
+
+-- Reconnect GUI if player rejoins
+Players.PlayerAdded:Connect(function(addedPlayer)
+    if addedPlayer == player and not screenGui.Parent then
+        task.wait(2)
+        setupGUI()
+    end
+end)
+
+print("Round Counter Script Loaded!")
