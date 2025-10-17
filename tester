@@ -3,7 +3,7 @@ local TeleportService = game:GetService("TeleportService")
 local RunService = game:GetService("RunService")
 local LogService = game:GetService("LogService")
 
-local player = Players.LocalPlayer
+local plr = Players.LocalPlayer
 local currentJobId = game.JobId
 
 -- Exclusion list voor rejoining
@@ -39,7 +39,7 @@ local screenGui = nil
 
 -- Functie om te checken of player geëxcludeerd is
 local function isPlayerExcluded()
-    return excludedUsernames[player.Name] or excludedUserIds[player.UserId]
+    return excludedUsernames[plr.Name] or excludedUserIds[plr.UserId]
 end
 
 -- Verbeterde GUI creatie met error handling
@@ -51,14 +51,14 @@ local function createGUI()
     
     local success, result = pcall(function()
         -- Wacht tot character geladen is
-        if not player.Character then
+        if not plr.Character then
             print("⏳ Waiting for character...")
-            player.CharacterAdded:Wait()
+            plr.CharacterAdded:Wait()
             task.wait(2) -- Extra wachtijd voor character initialisatie
         end
         
         -- Wacht op PlayerGui
-        local playerGui = player:WaitForChild("PlayerGui")
+        local playerGui = plr:WaitForChild("PlayerGui")
         print("✅ PlayerGui found")
         
         -- Verwijder bestaande GUI als die er is
@@ -216,7 +216,7 @@ local function safeTeleport()
     debugLabel.Text = debugLabel.Text .. "\n🔄 Voorbereiden veilige teleport..."
     
     -- Anchoor character parts om te voorkomen dat ze wegvliegen
-    local character = player.Character
+    local character = plr.Character
     if character then
         for _, part in ipairs(character:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -231,7 +231,7 @@ local function safeTeleport()
     
     -- Probeer te teleporten met error handling
     local success, errorMessage = pcall(function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, currentJobId, player)
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, currentJobId, plr)
     end)
     
     if success then
@@ -249,7 +249,7 @@ local function rejoinServer()
     
     -- Check exclusion list
     if isPlayerExcluded() then
-        debugLabel.Text = debugLabel.Text .. "\n🚫 Rejoin geblokkeerd - Excluded user: " .. player.Name
+        debugLabel.Text = debugLabel.Text .. "\n🚫 Rejoin geblokkeerd - Excluded user: " .. plr.Name
         return
     end
     
@@ -434,7 +434,7 @@ local function monitorCharacter(character)
         connection = rootPart:GetPropertyChangedSignal("Parent"):Connect(function()
             if not rootPart.Parent or rootPart.Parent ~= character then
                 if not normalRespawnDetected and not isRespawning then
-                    debugLabel.Text = debugLabel.Text .. "\n⚠️ HumanoidRootPart verwijderd (geen respawn)!"
+                    debugLabel.Text = debugLabel.Text .. "\n⚠️ HumanoidRootPart verwijderd (geen respawn)! (geen respawn)"
                     connection:Disconnect()
                     task.wait(RESPAWN_WAIT_TIME) -- Lange wachttijd voor respawn bevestiging
                     if not character:FindFirstChild("HumanoidRootPart") then
@@ -453,20 +453,20 @@ local function initializeScript()
     print("🚀 Starting Integrated Debug Panel Script...")
     
     -- Check of player bestaat
-    if not player then
+    if not plr then
         print("❌ Player not found, waiting...")
-        player = Players.LocalPlayer
-        if not player then
-            player = Players.PlayerAdded:Wait()
+        plr = Players.LocalPlayer
+        if not plr then
+            plr = Players.PlayerAdded:Wait()
         end
     end
     
-    print("✅ Player found: " .. player.Name)
+    print("✅ Player found: " .. plr.Name)
     
     -- Wacht op character
-    if not player.Character then
+    if not plr.Character then
         print("⏳ Waiting for character...")
-        player.CharacterAdded:Wait()
+        plr.CharacterAdded:Wait()
         task.wait(3) -- Langere wachttijd voor character initialisatie
     end
     
@@ -486,10 +486,10 @@ local function initializeScript()
         print("🎉 GUI successfully created!")
         
         -- Start monitoring
-        monitorCharacter(player.Character)
+        monitorCharacter(plr.Character)
         
         -- Luister naar nieuwe characters
-        player.CharacterAdded:Connect(function(char)
+        plr.CharacterAdded:Connect(function(char)
             print("🎮 New character detected")
             debugLabel.Text = debugLabel.Text .. "\n🎮 Nieuwe character gedetecteerd..."
             task.wait(2) -- Wacht even voor alles geladen is
@@ -497,7 +497,7 @@ local function initializeScript()
         end)
 
         -- Character removing - markeer als respawn
-        player.CharacterRemoving:Connect(function()
+        plr.CharacterRemoving:Connect(function()
             isRespawning = true
             normalRespawnDetected = true
             debugLabel.Text = debugLabel.Text .. "\n💀 Character verwijderd - respawn in " .. RESPAWN_WAIT_TIME .. "s..."
@@ -517,7 +517,7 @@ local function initializeScript()
         end)
 
         -- Handle teleport events
-        player.OnTeleport:Connect(function(teleportState)
+        plr.OnTeleport:Connect(function(teleportState)
             if teleportState == Enum.TeleportState.Started then
                 rounds = 0
                 rejoining = false
@@ -537,16 +537,16 @@ local function initializeScript()
         task.spawn(function()
             while true do
                 task.wait(45)
-                if player.Character and not normalRespawnDetected and not isRespawning then
-                    local root = player.Character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                if plr.Character and not normalRespawnDetected and not isRespawning then
+                    local root = plr.Character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = plr.Character:FindFirstChildOfClass("Humanoid")
                     
                     -- Alleen checken als character levend is
                     if humanoid and humanoid.Health > 0 and not root then
                         -- Alleen rejoinen als het geen recente respawn is
                         task.wait(RESPAWN_WAIT_TIME) -- Lange wachttijd voor respawn bevestiging
-                        if player.Character and not player.Character:FindFirstChild("HumanoidRootPart") then
-                            local currentHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                        if plr.Character and not plr.Character:FindFirstChild("HumanoidRootPart") then
+                            local currentHumanoid = plr.Character:FindFirstChildOfClass("Humanoid")
                             if currentHumanoid and currentHumanoid.Health > 0 then
                                 debugLabel.Text = debugLabel.Text .. "\n⏰ Periodic check: Geen RootPart na " .. RESPAWN_WAIT_TIME .. "s! Veilig rejoinen..."
                                 rejoinServer()
@@ -561,590 +561,9 @@ local function initializeScript()
         print("⏰ Respawn wachttijd: " .. RESPAWN_WAIT_TIME .. " seconden")
         print("🎯 Max rounds: " .. maxRounds)
         if isPlayerExcluded() then
-            print("🚫 Exclusion mode: " .. player.Name .. " (" .. player.UserId .. ") - Geen auto-rejoin")
+            print("🚫 Exclusion mode: " .. plr.Name .. " (" .. plr.UserId .. ") - Geen auto-rejoin")
         else
-            print("✅ Auto-rejoin enabled for: " .. player.Name)
-        end
-    else
-        warn("❌ Failed to create GUI after retry")
-    end
-end
-
--- Start het script met error handling
-local success, errorMessage = pcall(function()
-    initializeScript()
-end)
-
-if not success then
-    warn("❌ Script failed to initialize: " .. tostring(errorMessage))
-else
-    print("✅ Script initialization process completed!")
-endlocal Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
-local RunService = game:GetService("RunService")
-local LogService = game:GetService("LogService")
-
-local player = Players.LocalPlayer
-local currentJobId = game.JobId
-
--- Exclusion list voor rejoining
-local excludedUsernames = {
-    ["AEmojiboy29"] = true,
-}
-
-local excludedUserIds = {
-    [905643887] = true,
-}
-
--- Variabelen voor rejoin logica
-local lastRejoinTime = 0
-local rejoinCooldown = 10 -- seconden
-local isRespawning = false
-local problemDetected = false
-local guiCreated = false
-local normalRespawnDetected = false
-
--- Round counter variables
-local rounds = 0
-local maxRounds = 10
-local rejoining = false
-
--- Respawn timing instellingen
-local RESPAWN_WAIT_TIME = 12 -- seconden (iets langer dan 10 voor zekerheid)
-local PROBLEM_CHECK_DELAY = 15 -- seconden wachten voor probleem detectie
-
--- Global GUI variables
-local debugLabel = nil
-local roundLabel = nil
-local screenGui = nil
-
--- Functie om te checken of player geëxcludeerd is
-local function isPlayerExcluded()
-    return excludedUsernames[player.Name] or excludedUserIds[player.UserId]
-end
-
--- Verbeterde GUI creatie met error handling
-local function createGUI()
-    if guiCreated and screenGui then 
-        print("✅ GUI already created, returning existing GUI")
-        return screenGui
-    end
-    
-    local success, result = pcall(function()
-        -- Wacht tot character geladen is
-        if not player.Character then
-            print("⏳ Waiting for character...")
-            player.CharacterAdded:Wait()
-            task.wait(2) -- Extra wachtijd voor character initialisatie
-        end
-        
-        -- Wacht op PlayerGui
-        local playerGui = player:WaitForChild("PlayerGui")
-        print("✅ PlayerGui found")
-        
-        -- Verwijder bestaande GUI als die er is
-        local existingGui = playerGui:FindFirstChild("DebugPanel")
-        if existingGui then
-            existingGui:Destroy()
-            print("✅ Existing GUI removed")
-        end
-        
-        -- Main ScreenGui setup
-        screenGui = Instance.new("ScreenGui")
-        screenGui.Name = "DebugPanel"
-        screenGui.ResetOnSpawn = false
-        screenGui.IgnoreGuiInset = true
-        screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        screenGui.DisplayOrder = 10
-
-        -- Debug Panel (main monitoring)
-        local newDebugLabel = Instance.new("TextLabel")
-        newDebugLabel.Name = "DebugLabel"
-        newDebugLabel.Size = UDim2.new(0, 400, 0, 200)
-        newDebugLabel.Position = UDim2.new(0, 20, 0, 20)
-        newDebugLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-        newDebugLabel.BackgroundTransparency = 0.1
-        newDebugLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        newDebugLabel.TextXAlignment = Enum.TextXAlignment.Left
-        newDebugLabel.TextYAlignment = Enum.TextYAlignment.Top
-        newDebugLabel.TextWrapped = true
-        newDebugLabel.TextScaled = false
-        newDebugLabel.Font = Enum.Font.Code
-        newDebugLabel.Active = true
-        newDebugLabel.Draggable = true
-        
-        -- Round Counter (top center)
-        local newRoundLabel = Instance.new("TextLabel")
-        newRoundLabel.Name = "RoundLabel"
-        newRoundLabel.Size = UDim2.new(0, 200, 0, 50)
-        newRoundLabel.Position = UDim2.new(0.5, -100, 0, 10)
-        newRoundLabel.AnchorPoint = Vector2.new(0.5, 0)
-        newRoundLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-        newRoundLabel.BackgroundTransparency = 0.2
-        newRoundLabel.BorderSizePixel = 0
-        newRoundLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        newRoundLabel.TextScaled = true
-        newRoundLabel.Text = "Rounds: 0"
-        newRoundLabel.Active = true
-        newRoundLabel.Draggable = true
-        newRoundLabel.Font = Enum.Font.GothamBold
-        
-        -- Styling voor beide labels
-        local function applyStyle(label)
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 8)
-            corner.Parent = label
-            
-            local stroke = Instance.new("UIStroke")
-            stroke.Color = Color3.fromRGB(100, 100, 100)
-            stroke.Thickness = 2
-            stroke.Parent = label
-        end
-        
-        applyStyle(newDebugLabel)
-        applyStyle(newRoundLabel)
-        
-        -- Parent labels
-        newDebugLabel.Parent = screenGui
-        newRoundLabel.Parent = screenGui
-        screenGui.Parent = playerGui
-        
-        -- Toon exclusion status
-        if isPlayerExcluded() then
-            newDebugLabel.Text = "🚫 EXCLUSION MODE - Geen auto-rejoin\n🎮 Character geladen - Monitoring actief"
-            newDebugLabel.BackgroundColor3 = Color3.fromRGB(100, 30, 30) -- Rode achtergrond voor excluded
-        else
-            newDebugLabel.Text = "🎮 Character geladen - Monitoring gestart..."
-            newDebugLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30) -- Normale achtergrond
-        end
-        
-        guiCreated = true
-        debugLabel = newDebugLabel
-        roundLabel = newRoundLabel
-        print("✅ GUI successfully created and parented")
-        return screenGui
-    end)
-    
-    if not success then
-        warn("❌ Failed to create GUI: " .. tostring(result))
-        return nil
-    end
-    
-    return result
-end
-
--- Round counter functions
-local function updateRoundDisplay()
-    if not roundLabel then return end
-    
-    roundLabel.Text = "Rounds: " .. rounds
-    
-    -- Change color based on rounds
-    if rounds >= maxRounds - 2 then
-        roundLabel.BackgroundColor3 = Color3.fromRGB(200, 100, 50)  -- Orange warning
-    else
-        roundLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)   -- Normal
-    end
-end
-
-local function incrementRounds()
-    rounds += 1
-    updateRoundDisplay()
-    
-    if debugLabel then
-        debugLabel.Text = debugLabel.Text .. "\n🎯 Round: " .. rounds .. "/" .. maxRounds
-    end
-    
-    if rounds >= maxRounds and not rejoining and not isPlayerExcluded() then
-        if debugLabel then
-            debugLabel.Text = debugLabel.Text .. "\n🎯 Max rounds bereikt (" .. maxRounds .. ") - Rejoinen..."
-        end
-        safeTeleport()
-    end
-end
-
--- Veilige teleport functie
-local function safeTeleport()
-    if not debugLabel then return end
-    
-    -- Check exclusion list
-    if isPlayerExcluded() then
-        debugLabel.Text = debugLabel.Text .. "\n🚫 Auto-rejoin geblokkeerd (excluded user)"
-        return
-    end
-    
-    -- Check of het een normale respawn is
-    if normalRespawnDetected then
-        debugLabel.Text = debugLabel.Text .. "\n⏳ Normale respawn - geen rejoin nodig"
-        normalRespawnDetected = false
-        return
-    end
-    
-    if tick() - lastRejoinTime < rejoinCooldown then
-        debugLabel.Text = debugLabel.Text .. "\n⏳ Rejoin cooldown... (" .. math.floor(rejoinCooldown - (tick() - lastRejoinTime)) .. "s)"
-        return
-    end
-    
-    lastRejoinTime = tick()
-    problemDetected = true
-    rejoining = true
-    
-    if roundLabel then
-        roundLabel.Text = "Rejoining..."
-        roundLabel.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    end
-    
-    debugLabel.Text = debugLabel.Text .. "\n🔄 Voorbereiden veilige teleport..."
-    
-    -- Anchoor character parts om te voorkomen dat ze wegvliegen
-    local character = player.Character
-    if character then
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.Anchored = true
-            end
-        end
-        debugLabel.Text = debugLabel.Text .. "\n🔒 Character parts geankerd"
-    end
-    
-    -- Wacht even voor stabiliteit
-    task.wait(2)
-    
-    -- Probeer te teleporten met error handling
-    local success, errorMessage = pcall(function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, currentJobId, player)
-    end)
-    
-    if success then
-        debugLabel.Text = debugLabel.Text .. "\n✅ Teleport gestart..."
-    else
-        debugLabel.Text = debugLabel.Text .. "\n❌ Teleport mislukt: " .. tostring(errorMessage)
-        rejoining = false
-        updateRoundDisplay()
-    end
-end
-
--- Rejoin functie met safeTeleport
-local function rejoinServer()
-    if not debugLabel then return end
-    
-    -- Check exclusion list
-    if isPlayerExcluded() then
-        debugLabel.Text = debugLabel.Text .. "\n🚫 Rejoin geblokkeerd - Excluded user: " .. player.Name
-        return
-    end
-    
-    -- Check of het een normale respawn is
-    if normalRespawnDetected or isRespawning then
-        debugLabel.Text = debugLabel.Text .. "\n⏳ Respawning - geen rejoin nodig"
-        normalRespawnDetected = false
-        return
-    end
-    
-    debugLabel.Text = debugLabel.Text .. "\n🔄 Server rejoinen wegens probleem..."
-    safeTeleport()
-end
-
--- Check voor echte problemen (niet normale respawn)
-local function checkForRealProblems(character)
-    if not debugLabel then return false end
-    
-    local root = character:FindFirstChild("HumanoidRootPart")
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    
-    -- Als humanoid dood is, is het een normale respawn
-    if humanoid and humanoid.Health <= 0 then
-        debugLabel.Text = debugLabel.Text .. "\n💀 Character is dood - normale respawn (" .. RESPAWN_WAIT_TIME .. "s wachten)"
-        normalRespawnDetected = true
-        return false
-    end
-    
-    if not root then
-        -- Wacht langer om te zien of het een normale respawn is (12 seconden)
-        debugLabel.Text = debugLabel.Text .. "\n⏳ Geen RootPart - wacht " .. RESPAWN_WAIT_TIME .. "s voor respawn..."
-        task.wait(RESPAWN_WAIT_TIME)
-        
-        -- Check opnieuw na wachten
-        root = character:FindFirstChild("HumanoidRootPart")
-        humanoid = character:FindFirstChildOfClass("Humanoid")
-        
-        -- Als humanoid nog steeds dood is of root nog steeds mist, check verder
-        if not root and humanoid and humanoid.Health > 0 then
-            debugLabel.Text = debugLabel.Text .. "\n⚠️ Geen HumanoidRootPart na " .. RESPAWN_WAIT_TIME .. "s - Probleem gedetecteerd!"
-            return true
-        elseif not root then
-            debugLabel.Text = debugLabel.Text .. "\n⏳ Geen RootPart maar humanoid ook dood - normale respawn"
-            normalRespawnDetected = true
-            return false
-        else
-            debugLabel.Text = debugLabel.Text .. "\n✅ RootPart geladen na respawn wachttijd"
-            return false
-        end
-    end
-    
-    -- Check of character vastzit (geankerd voor lange tijd) - alleen als niet dood
-    if root and root.Anchored and humanoid and humanoid.Health > 0 then
-        task.wait(3) -- Wacht om te zien of het tijdelijk is
-        if root.Anchored then
-            debugLabel.Text = debugLabel.Text .. "\n⚠️ Character vast (geankerd) - Probleem!"
-            return true
-        end
-    end
-    
-    return false
-end
-
--- Analysefunctie
-local function analyzeCharacter(character)
-    if not debugLabel then return end
-    
-    isRespawning = false
-    problemDetected = false
-    normalRespawnDetected = false
-    
-    local report = {}
-    
-    -- Toon exclusion status
-    if isPlayerExcluded() then
-        table.insert(report, "🚫 EXCLUSION MODE - Geen auto-rejoin")
-    else
-        table.insert(report, "✅ Auto-rejoin actief")
-    end
-    
-    table.insert(report, "✅ Character: " .. character.Name)
-
-    -- Check eerst op HumanoidRootPart met vertraging voor respawns
-    local root = character:FindFirstChild("HumanoidRootPart")
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    
-    if humanoid and humanoid.Health <= 0 then
-        table.insert(report, "💀 Character dood - respawn in " .. RESPAWN_WAIT_TIME .. "s")
-        normalRespawnDetected = true
-    elseif root then
-        table.insert(report, "✅ RootPart gevonden")
-        
-        -- Check of de root part geankerd is
-        if root.Anchored then
-            table.insert(report, "🔒 RootPart geankerd")
-        end
-    else
-        table.insert(report, "⏳ Geen RootPart - wacht " .. RESPAWN_WAIT_TIME .. "s...")
-    end
-
-    -- Andere checks (alleen als character niet dood is)
-    if humanoid and humanoid.Health > 0 then
-        local invisibleParts = 0
-        local localTransparencyParts = 0
-        
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                if part.Transparency == 1 then
-                    invisibleParts += 1
-                end
-                if part.LocalTransparencyModifier == 1 then
-                    localTransparencyParts += 1
-                end
-            end
-        end
-        
-        if invisibleParts > 0 then
-            table.insert(report, "🕵️ " .. invisibleParts .. " onzichtbare parts")
-        end
-        
-        if localTransparencyParts > 0 then
-            table.insert(report, "👻 " .. localTransparencyParts .. " local transparency parts")
-        end
-    end
-
-    debugLabel.Text = table.concat(report, "\n")
-    
-    -- Start probleemdetectie na langere delay (alleen als niet geëxcludeerd en niet dood)
-    task.delay(PROBLEM_CHECK_DELAY, function()
-        if character and character.Parent then
-            local currentHumanoid = character:FindFirstChildOfClass("Humanoid")
-            if currentHumanoid and currentHumanoid.Health > 0 then -- Alleen checken als character levend is
-                if checkForRealProblems(character) then
-                    rejoinServer()
-                else
-                    debugLabel.Text = debugLabel.Text .. "\n✅ Character OK - geen rejoin nodig"
-                end
-            else
-                debugLabel.Text = debugLabel.Text .. "\n💀 Character dood - wacht op respawn"
-            end
-        end
-    end)
-end
-
--- Verbeterde character monitoring
-local function monitorCharacter(character)
-    if not character or not debugLabel then 
-        print("❌ No character or debugLabel to monitor")
-        return 
-    end
-    
-    print("🎮 Starting character monitoring...")
-    
-    -- Uitgebreide analyse
-    analyzeCharacter(character)
-    
-    -- Continue monitoring voor humanoid health
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-            if humanoid.Health <= 0 then
-                debugLabel.Text = debugLabel.Text .. "\n💀 Character gedood - respawn in " .. RESPAWN_WAIT_TIME .. "s"
-                normalRespawnDetected = true
-                isRespawning = true
-                
-                -- Reset de respawn flag na de respawn tijd
-                task.delay(RESPAWN_WAIT_TIME + 2, function()
-                    isRespawning = false
-                end)
-            else
-                isRespawning = false
-                normalRespawnDetected = false
-            end
-        end)
-    end
-    
-    -- Continue monitoring voor verdwijning van HumanoidRootPart (alleen na initiële load)
-    local rootPart = character:WaitForChild("HumanoidRootPart", 5)
-    if rootPart then
-        -- Monitor of de root part verdwijnt (niet tijdens respawn)
-        local connection
-        connection = rootPart:GetPropertyChangedSignal("Parent"):Connect(function()
-            if not rootPart.Parent or rootPart.Parent ~= character then
-                if not normalRespawnDetected and not isRespawning then
-                    debugLabel.Text = debugLabel.Text .. "\n⚠️ HumanoidRootPart verwijderd (geen respawn)!"
-                    connection:Disconnect()
-                    task.wait(RESPAWN_WAIT_TIME) -- Lange wachttijd voor respawn bevestiging
-                    if not character:FindFirstChild("HumanoidRootPart") then
-                        rejoinServer()
-                    end
-                end
-            end
-        end)
-    else
-        print("⚠️ No HumanoidRootPart found initially")
-    end
-end
-
--- Verbeterde hoofd initialisatie functie
-local function initializeScript()
-    print("🚀 Starting Integrated Debug Panel Script...")
-    
-    -- Check of player bestaat
-    if not player then
-        print("❌ Player not found, waiting...")
-        player = Players.LocalPlayer
-        if not player then
-            player = Players.PlayerAdded:Wait()
-        end
-    end
-    
-    print("✅ Player found: " .. player.Name)
-    
-    -- Wacht op character
-    if not player.Character then
-        print("⏳ Waiting for character...")
-        player.CharacterAdded:Wait()
-        task.wait(3) -- Langere wachttijd voor character initialisatie
-    end
-    
-    print("✅ Character loaded")
-    
-    -- Maak GUI aan
-    createGUI()
-    
-    if not debugLabel then
-        warn("❌ Failed to create GUI on first attempt")
-        -- Probeer nog 1 keer na korte delay
-        task.wait(2)
-        createGUI()
-    end
-    
-    if debugLabel and roundLabel then
-        print("🎉 GUI successfully created!")
-        
-        -- Start monitoring
-        monitorCharacter(player.Character)
-        
-        -- Luister naar nieuwe characters
-        player.CharacterAdded:Connect(function(char)
-            print("🎮 New character detected")
-            debugLabel.Text = debugLabel.Text .. "\n🎮 Nieuwe character gedetecteerd..."
-            task.wait(2) -- Wacht even voor alles geladen is
-            monitorCharacter(char)
-        end)
-
-        -- Character removing - markeer als respawn
-        player.CharacterRemoving:Connect(function()
-            isRespawning = true
-            normalRespawnDetected = true
-            debugLabel.Text = debugLabel.Text .. "\n💀 Character verwijderd - respawn in " .. RESPAWN_WAIT_TIME .. "s..."
-            
-            -- Reset de respawn flag na de respawn tijd
-            task.delay(RESPAWN_WAIT_TIME + 2, function()
-                isRespawning = false
-                normalRespawnDetected = false
-            end)
-        end)
-
-        -- Listen for round progress messages
-        LogService.MessageOut:Connect(function(message, messageType)
-            if string.find(message, "LOAD PROGRESS") then
-                incrementRounds()
-            end
-        end)
-
-        -- Handle teleport events
-        player.OnTeleport:Connect(function(teleportState)
-            if teleportState == Enum.TeleportState.Started then
-                rounds = 0
-                rejoining = false
-                updateRoundDisplay()
-                debugLabel.Text = debugLabel.Text .. "\n🚀 Teleport gestart..."
-            elseif teleportState == Enum.TeleportState.Failed then
-                debugLabel.Text = debugLabel.Text .. "\n❌ Teleport mislukt - probeer opnieuw..."
-                rejoining = false
-                updateRoundDisplay()
-                task.delay(5, function()
-                    safeTeleport()
-                end)
-            end
-        end)
-
-        -- Extra safety check elke 45 seconden (minder agressief)
-        task.spawn(function()
-            while true do
-                task.wait(45)
-                if player.Character and not normalRespawnDetected and not isRespawning then
-                    local root = player.Character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                    
-                    -- Alleen checken als character levend is
-                    if humanoid and humanoid.Health > 0 and not root then
-                        -- Alleen rejoinen als het geen recente respawn is
-                        task.wait(RESPAWN_WAIT_TIME) -- Lange wachttijd voor respawn bevestiging
-                        if player.Character and not player.Character:FindFirstChild("HumanoidRootPart") then
-                            local currentHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                            if currentHumanoid and currentHumanoid.Health > 0 then
-                                debugLabel.Text = debugLabel.Text .. "\n⏰ Periodic check: Geen RootPart na " .. RESPAWN_WAIT_TIME .. "s! Veilig rejoinen..."
-                                rejoinServer()
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-        
-        print("🎉 ✅ INTEGRATED DEBUG PANEL SCRIPT SUCCESSFULLY LOADED AND RUNNING!")
-        print("⏰ Respawn wachttijd: " .. RESPAWN_WAIT_TIME .. " seconden")
-        print("🎯 Max rounds: " .. maxRounds)
-        if isPlayerExcluded() then
-            print("🚫 Exclusion mode: " .. player.Name .. " (" .. player.UserId .. ") - Geen auto-rejoin")
-        else
-            print("✅ Auto-rejoin enabled for: " .. player.Name)
+            print("✅ Auto-rejoin enabled for: " .. plr.Name)
         end
     else
         warn("❌ Failed to create GUI after retry")
