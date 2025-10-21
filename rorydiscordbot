@@ -1,1 +1,269 @@
+-- LocalScript inside MatchResultsController or somewhere after v4.ShowMR.OnClientEvent is defined
+-- This listens every time MatchResults are shown
 
+local Players = game:GetService("Players")
+
+-- ✅ Roblox Discord Webhook Logger (Using Custom HTTP Method)
+-- This bypasses normal HttpService restrictions
+
+local LogService = game:GetService("LogService")
+
+-- Your Discord Webhook URL
+local webhookURL = "https://discordapp.com/api/webhooks/1430163505180311734/CDO5rGt0B1tr1HNS3QPwqYoqxCVoZLxBsxmMG8MCnlV9jONzb12wyrrD6S0JbJQD6TnB"
+
+-- Track player join times
+local playerJoinTimes = {}
+local rounds = 0
+
+------------------------------------------------------------
+-- 🔧 CUSTOM HTTP FUNCTION (Like the pastebin uses)
+------------------------------------------------------------
+local function http_request(options)
+    -- Try to use the same method as that pastebin
+    local http_request_function = syn and syn.request or request
+    if not http_request_function then
+        -- Fallback to regular HttpService
+        local HttpService = game:GetService("HttpService")
+        if options.Method == "POST" then
+            local success, result = pcall(function()
+                return HttpService:PostAsync(options.Url, options.Body, "application/json")
+            end)
+            return { Success = success, Body = result }
+        else
+            local success, result = pcall(function()
+                return HttpService:GetAsync(options.Url)
+            end)
+            return { Success = success, Body = result }
+        end
+    end
+    
+    return http_request_function(options)
+end
+
+------------------------------------------------------------
+-- 🔧 FIXED: POST to Discord using custom HTTP
+------------------------------------------------------------
+local function postToDiscord(payload)
+    local success, result = pcall(function()
+        local response = http_request({
+            Url = webhookURL,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
+            },
+            Body = game:GetService("HttpService"):JSONEncode(payload)
+        })
+        return response
+    end)
+
+    if success then
+        print("✅ Webhook sent successfully!")
+        return true
+    else
+        warn("❌ Webhook failed: " .. tostring(result))
+        return false
+    end
+end
+
+------------------------------------------------------------
+-- 💬 Helper: Send a Discord Embed
+------------------------------------------------------------
+local function sendEmbedToDiscord(title, description, fields, color, avatarURL)
+    if not webhookURL or webhookURL == "" then
+        warn("❌ Webhook URL not set properly!")
+        return false
+    end
+
+    local data = {
+        username = "Game Logger",
+        avatar_url = "https://assetdelivery.roblox.com/v1/asset?id=634466271",
+        embeds = {{
+            title = title,
+            description = description,
+            color = color or 0x00FF00,
+            thumbnail = avatarURL and { url = avatarURL } or nil,
+            fields = fields or {},
+            timestamp = DateTime.now():ToIsoDate(),
+            footer = { text = "Round: " .. tostring(rounds) }
+        }}
+    }
+
+    return postToDiscord(data)
+end
+
+------------------------------------------------------------
+-- 🔄 Round End Event with Top Killer
+------------------------------------------------------------
+local function sendRoundEnd(topKiller, topKills, playersTable)
+    rounds += 1
+    print("🏁 Round " .. rounds .. " ended - Top killer: " .. tostring(topKiller) .. " with " .. tostring(topKills) .. " kills")
+
+    local players = Players:GetPlayers()
+    local playerInfo = {}
+
+    for _, player in ipairs(players) do
+        table.insert(playerInfo, player.Name .. " (ID: " .. player.UserId .. ")")
+    end
+
+    -- Build kill breakdown
+    local killBreakdown = {}
+    if playersTable then
+        for _, playerData in pairs(playersTable) do
+            if playerData.Kills and playerData.Kills > 0 then
+                local star = playerData.Name == topKiller and " ⭐" or ""
+                table.insert(killBreakdown, playerData.Name .. ": " .. playerData.Kills .. " kills" .. star)
+            end
+        end
+    end
+
+    local fields = {
+        { name = "🎯 Round Number", value = "**" .. rounds .. "**", inline = true },
+        { name = "👥 Players Online", value = tostring(#players) .. "/10", inline = true },
+        { name = "🏆 Top Killer", value = topKiller and ("**" .. topKiller .. "**") or "No kills", inline = true },
+        { name = "🔫 Total Kills", value = topKiller and ("**" .. topKills .. " kills**") or "0", inline = true }
+    }
+
+    -- Add kill breakdown if available
+    if #killBreakdown > 0 then
+        table.insert(fields, { name = "📊 Kill Breakdown", value = table.concat(killBreakdown, "\n"), inline = false })
+    end
+
+    -- Add current players
+    table.insert(fields, { name = "📋 Players in Server", value = #playerInfo > 0 and table.concat(playerInfo, "\n") or "No players online", inline = false })
+
+    local title = "🏁 Round " .. rounds .. " Completed"
+    local description = topKiller and ("**" .. topKiller .. "** dominated with " .. topKills .. " kills!") or "Round completed with no kills."
+
+    sendEmbedToDiscord(title, description, fields, 0xFFA500) -- Orange color for round end
+end
+
+------------------------------------------------------------
+-- 🟢 Server Start
+------------------------------------------------------------
+local function sendServerStatus()
+    print("🟢 Sending server status...")
+    local players = Players:GetPlayers()
+    local playerInfo = {}
+
+    for _, player in ipairs(players) do
+        table.insert(playerInfo, player.Name .. " (ID: " .. player.UserId .. ")")
+    end
+
+    local fields = {
+        { name = "🟢 Server Status", value = "Online", inline = true },
+        { name = "👥 Players Online", value = tostring(#players) .. "/10", inline = true },
+        { name = "📋 Current Players", value = #playerInfo > 0 and table.concat(playerInfo, "\n") or "No players online", inline = false }
+    }
+
+    sendEmbedToDiscord("🟢 Server Started", "Game server is now online!", fields, 0x00FF00)
+end
+
+------------------------------------------------------------
+-- 👤 Player Join (SIMPLIFIED - no avatars to avoid HTTP issues)
+------------------------------------------------------------
+Players.PlayerAdded:Connect(function(player)
+    print("🎉 Player joined: " .. player.Name)
+    playerJoinTimes[player.UserId] = os.time()
+
+    local fields = {
+        { name = "👤 Username", value = player.Name, inline = true },
+        { name = "🆔 User ID", value = tostring(player.UserId), inline = true },
+        { name = "📅 Account Age", value = tostring(player.AccountAge) .. " days", inline = true },
+        { name = "👥 Total Players", value = tostring(#Players:GetPlayers()) .. "/10", inline = true }
+    }
+
+    sendEmbedToDiscord("🎉 " .. player.Name .. " joined the game!", "Welcome to the server!", fields, 0x00FF00)
+end)
+
+------------------------------------------------------------
+-- 👋 Player Leave (SIMPLIFIED)
+------------------------------------------------------------
+Players.PlayerRemoving:Connect(function(player)
+    print("👋 Player left: " .. player.Name)
+    local joinTime = playerJoinTimes[player.UserId] or os.time()
+    local timeSpent = os.time() - joinTime
+    local minutes = math.floor(timeSpent / 60)
+    playerJoinTimes[player.UserId] = nil
+
+    local fields = {
+        { name = "👤 Username", value = player.Name, inline = true },
+        { name = "🆔 User ID", value = tostring(player.UserId), inline = true },
+        { name = "📅 Account Age", value = tostring(player.AccountAge) .. " days", inline = true },
+        { name = "⏰ Time Spent", value = tostring(minutes) .. " minutes", inline = true },
+        { name = "👥 Players Left", value = tostring(#Players:GetPlayers() - 1) .. "/10", inline = true }
+    }
+
+    sendEmbedToDiscord("👋 " .. player.Name .. " left the game", "Player has disconnected.", fields, 0xFF0000)
+end)
+
+------------------------------------------------------------
+-- 🎯 MAIN: Detect Match Results and Top Killer
+------------------------------------------------------------
+game.ReplicatedStorage.Remotes.ShowMR.OnClientEvent:Connect(function(_, _, _, _, _, _, _, playersTable)
+    -- ^ the 8th parameter (playersTable) is the list of players shown on the match results
+    if typeof(playersTable) ~= "table" then
+        warn("⚠️ MatchResults: No valid players table found")
+        return
+    end
+
+    local topKiller = nil
+    local topKills = -1
+
+    -- Loop through all players in the results
+    for _, playerData in pairs(playersTable) do
+        if playerData.Kills and playerData.Kills > topKills then
+            topKiller = playerData.Name
+            topKills = playerData.Kills
+        end
+    end
+
+    if topKiller then
+        print(string.format("🏆 Top killer: %s (%d kills)", topKiller, topKills))
+        -- Send round end webhook with top killer info
+        sendRoundEnd(topKiller, topKills, playersTable)
+    else
+        print("⚠️ No top killer found in this round")
+        -- Send round end webhook with no killer info
+        sendRoundEnd(nil, 0, playersTable)
+    end
+end)
+
+------------------------------------------------------------
+-- 🔍 Detect Round Start (LOAD PROGRESS)
+------------------------------------------------------------
+LogService.MessageOut:Connect(function(message)
+    print("📝 Log detected: " .. message)
+    if message:find("LOAD PROGRESS") then
+        print("✅ LOAD PROGRESS detected - Round starting soon...")
+        -- We don't send webhook here anymore, we wait for match results
+    end
+end)
+
+------------------------------------------------------------
+-- 🚀 TEST FUNCTION: Simple test
+------------------------------------------------------------
+local function testWebhook()
+    print("🧪 Testing webhook manually...")
+    local testFields = {
+        { name = "🧪 Test", value = "Webhook test successful!", inline = true },
+        { name = "🎯 Test Killer", value = "TestPlayer: 5 kills ⭐", inline = true }
+    }
+    sendEmbedToDiscord("🧪 Webhook Test", "Testing connection to Discord with killer data", testFields, 0x9932CC)
+end
+
+------------------------------------------------------------
+-- 🚀 Initialization
+------------------------------------------------------------
+print("🔧 Starting Discord webhook system with kill tracking...")
+
+-- Simple startup - no waiting for players
+task.delay(5, function()
+    sendServerStatus()
+end)
+
+task.delay(15, function()
+    testWebhook()
+end)
+
+print("✅ Discord webhook system loaded successfully!")
+print("💡 System will track top killers from match results and send to webhook")
