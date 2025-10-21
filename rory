@@ -1,269 +1,688 @@
--- LocalScript inside MatchResultsController or somewhere after v4.ShowMR.OnClientEvent is defined
--- This listens every time MatchResults are shown
+local player = game:GetService("Players").LocalPlayer
+local userId = player.UserId
+local url = "https://discordbotv2-production-28c4.up.railway.app/check_whitelist?user_id=" .. userId
 
+print("🔍 Checking whitelist for: " .. player.Name .. " (ID: " .. userId .. ")")
+
+local success, result = pcall(function()
+    local response = game:HttpGet(url)
+    local data = game:GetService("HttpService"):JSONDecode(response)
+    return data
+end)
+
+if success and result then
+    if result.whitelisted == true then
+        print("YOU ARE WHITELISTED!")
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "WHITELISTED",
+            Text = "YESSSSSSSSSSSSSSS",
+            Duration = 5
+        })
+        -- Hier je script features toevoegen
 local Players = game:GetService("Players")
-
--- ✅ Roblox Discord Webhook Logger (Using Custom HTTP Method)
--- This bypasses normal HttpService restrictions
-
+local TeleportService = game:GetService("TeleportService")
 local LogService = game:GetService("LogService")
 
--- Your Discord Webhook URL
-local webhookURL = "https://discordapp.com/api/webhooks/1430163505180311734/CDO5rGt0B1tr1HNS3QPwqYoqxCVoZLxBsxmMG8MCnlV9jONzb12wyrrD6S0JbJQD6TnB"
+local player = Players.LocalPlayer
+local currentJobId = game.JobId
 
--- Track player join times
-local playerJoinTimes = {}
+-- Excluded players (won't auto-rejoin)
+local excludedUsernames = {
+    ["dfahgdfgfsdvsda"] = true,
+}
+
+local excludedUserIds = {
+    [140336590] = true,
+}
+
+-- Wait for player to be fully loaded
+if not player then
+    player = Players.PlayerAdded:Wait()
+end
+
+-- Create GUI elements first
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "RoundCounterGui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.DisplayOrder = 10
+
+local roundLabel = Instance.new("TextLabel")
+roundLabel.Size = UDim2.new(0, 200, 0, 50)
+roundLabel.Position = UDim2.new(0.5, -100, 0, 10)
+roundLabel.AnchorPoint = Vector2.new(0.5, 0)
+roundLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+roundLabel.BackgroundTransparency = 0.2
+roundLabel.BorderSizePixel = 0
+roundLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+roundLabel.TextScaled = true
+roundLabel.Text = "Rounds: 0"
+roundLabel.Active = true
+roundLabel.Draggable = true
+roundLabel.Font = Enum.Font.GothamBold
+
+-- Add corner for better look
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = roundLabel
+
+-- Add stroke for better visibility
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(100, 100, 100)
+stroke.Thickness = 2
+stroke.Parent = roundLabel
+
+roundLabel.Parent = screenGui
+
 local rounds = 0
+local maxRounds = 10
+local rejoining = false
 
-------------------------------------------------------------
--- 🔧 CUSTOM HTTP FUNCTION (Like the pastebin uses)
-------------------------------------------------------------
-local function http_request(options)
-    -- Try to use the same method as that pastebin
-    local http_request_function = syn and syn.request or request
-    if not http_request_function then
-        -- Fallback to regular HttpService
-        local HttpService = game:GetService("HttpService")
-        if options.Method == "POST" then
-            local success, result = pcall(function()
-                return HttpService:PostAsync(options.Url, options.Body, "application/json")
+-- Function to safely parent GUI
+local function setupGUI()
+    local success, errorMsg = pcall(function()
+        local playerGui = player:WaitForChild("PlayerGui")
+        
+        -- Remove existing GUI if it exists
+        local existingGui = playerGui:FindFirstChild("RoundCounterGui")
+        if existingGui then
+            existingGui:Destroy()
+        end
+        
+        screenGui.Parent = playerGui
+        print("Round Counter GUI loaded successfully!")
+    end)
+    
+    if not success then
+        warn("Failed to setup GUI: " .. tostring(errorMsg))
+        -- Retry after a short delay
+        task.delay(3, setupGUI)
+    end
+end
+
+-- Safe teleport function
+local function safeTeleport()
+    if excludedUsernames[player.Name] or excludedUserIds[player.UserId] then
+        return
+    end
+    
+    rejoining = true
+    roundLabel.Text = "Rejoining..."
+    roundLabel.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    
+    -- Small delay before teleporting
+    task.delay(2, function()
+        local success = pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, currentJobId, player)
+        end)
+        if not success then
+            roundLabel.Text = "Teleport Failed!"
+            task.delay(3, function()
+                rejoining = false
+                roundLabel.Text = "Rounds: " .. rounds
             end)
-            return { Success = success, Body = result }
+        end
+    end)
+end
+
+-- Increment rounds function
+local function incrementRounds()
+    rounds += 1
+    roundLabel.Text = "Rounds: " .. rounds
+    
+    -- Change color based on rounds
+    if rounds >= maxRounds - 2 then
+        roundLabel.BackgroundColor3 = Color3.fromRGB(200, 100, 50)  -- Orange warning
+    else
+        roundLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)   -- Normal
+    end
+    
+    if rounds >= maxRounds and not rejoining then
+        safeTeleport()
+    end
+end
+
+-- Set up GUI when player is ready
+task.spawn(function()
+    -- Wait for everything to load
+    task.wait(2)
+    setupGUI()
+end)
+
+-- Listen for round progress messages
+LogService.MessageOut:Connect(function(message, messageType)
+    if string.find(message, "LOAD PROGRESS") then
+        incrementRounds()
+    end
+end)
+
+-- Handle teleport events
+player.OnTeleport:Connect(function(teleportState)
+    if teleportState == Enum.TeleportState.Started then
+        rounds = 0
+        rejoining = false
+    end
+end)
+
+-- Handle character respawn (in case GUI gets removed)
+player.CharacterAdded:Connect(function()
+    task.wait(2) -- Wait a bit for everything to load
+    if not screenGui or not screenGui.Parent then
+        setupGUI()
+    end
+end)
+
+-- Reconnect GUI if player rejoins
+Players.PlayerAdded:Connect(function(addedPlayer)
+    if addedPlayer == player and not screenGui.Parent then
+        task.wait(2)
+        setupGUI()
+    end
+end)
+print("Round Counter Script Loaded!")
+wait(0.5)
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local currentJobId = game.JobId
+
+-- Exclusion list voor rejoining
+local excludedUsernames = {
+    ["dfahgdfgfsdvsda"] = true,
+}
+
+local excludedUserIds = {
+    [140336590] = true,
+}
+
+-- Variabelen voor rejoin logica
+local lastRejoinTime = 0
+local rejoinCooldown = 10 -- seconden
+local isRespawning = false
+local problemDetected = false
+local guiCreated = false
+local normalRespawnDetected = false
+
+-- Respawn timing instellingen
+local RESPAWN_WAIT_TIME = 12 -- seconden (iets langer dan 10 voor zekerheid)
+local PROBLEM_CHECK_DELAY = 15 -- seconden wachten voor probleem detectie
+
+-- Global debugLabel variable
+local debugLabel = nil
+
+-- Functie om te checken of player geëxcludeerd is
+local function isPlayerExcluded()
+    return excludedUsernames[player.Name] or excludedUserIds[player.UserId]
+end
+
+-- Verbeterde GUI creatie met error handling
+local function createGUI()
+    if guiCreated and debugLabel then 
+        print("✅ GUI already created, returning existing label")
+        return debugLabel
+    end
+    
+    local success, result = pcall(function()
+        -- Wacht tot character geladen is
+        if not player.Character then
+            print("⏳ Waiting for character...")
+            player.CharacterAdded:Wait()
+            task.wait(2) -- Extra wachtijd voor character initialisatie
+        end
+        
+        -- Wacht op PlayerGui
+        local playerGui = player:WaitForChild("PlayerGui")
+        print("✅ PlayerGui found")
+        
+        -- Verwijder bestaande GUI als die er is
+        local existingGui = playerGui:FindFirstChild("DebugPanel")
+        if existingGui then
+            existingGui:Destroy()
+            print("✅ Existing GUI removed")
+        end
+        
+        -- GUI setup
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "DebugPanel"
+        screenGui.ResetOnSpawn = false
+        screenGui.Parent = playerGui
+
+        local newDebugLabel = Instance.new("TextLabel")
+        newDebugLabel.Size = UDim2.new(0, 400, 0, 200)
+        newDebugLabel.Position = UDim2.new(0, 20, 0, 20)
+        newDebugLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        newDebugLabel.BackgroundTransparency = 0.1
+        newDebugLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        newDebugLabel.TextXAlignment = Enum.TextXAlignment.Left
+        newDebugLabel.TextYAlignment = Enum.TextYAlignment.Top
+        newDebugLabel.TextWrapped = true
+        newDebugLabel.TextScaled = false
+        newDebugLabel.Font = Enum.Font.Code
+        newDebugLabel.Active = true
+        newDebugLabel.Draggable = true
+        newDebugLabel.Parent = screenGui
+        
+        -- Toon exclusion status
+        if isPlayerExcluded() then
+            newDebugLabel.Text = "🚫 EXCLUSION MODE - Geen auto-rejoin\n🎮 Character geladen - Monitoring actief"
+            newDebugLabel.BackgroundColor3 = Color3.fromRGB(100, 30, 30) -- Rode achtergrond voor excluded
         else
-            local success, result = pcall(function()
-                return HttpService:GetAsync(options.Url)
-            end)
-            return { Success = success, Body = result }
+            newDebugLabel.Text = "🎮 Character geladen - Monitoring gestart..."
+            newDebugLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30) -- Normale achtergrond
+        end
+        
+        -- Styling toevoegen
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = newDebugLabel
+        
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Color3.fromRGB(100, 100, 100)
+        stroke.Thickness = 2
+        stroke.Parent = newDebugLabel
+        
+        guiCreated = true
+        debugLabel = newDebugLabel
+        print("✅ GUI successfully created and parented")
+        return newDebugLabel
+    end)
+    
+    if not success then
+        warn("❌ Failed to create GUI: " .. tostring(result))
+        return nil
+    end
+    
+    return result
+end
+
+-- Veilige teleport functie
+local function safeTeleport()
+    if not debugLabel then return end
+    
+    -- Check exclusion list
+    if isPlayerExcluded() then
+        debugLabel.Text = debugLabel.Text .. "\n🚫 Auto-rejoin geblokkeerd (excluded user)"
+        return
+    end
+    
+    -- Check of het een normale respawn is
+    if normalRespawnDetected then
+        debugLabel.Text = debugLabel.Text .. "\n⏳ Normale respawn - geen rejoin nodig"
+        normalRespawnDetected = false
+        return
+    end
+    
+    if tick() - lastRejoinTime < rejoinCooldown then
+        debugLabel.Text = debugLabel.Text .. "\n⏳ Rejoin cooldown... (" .. math.floor(rejoinCooldown - (tick() - lastRejoinTime)) .. "s)"
+        return
+    end
+    
+    lastRejoinTime = tick()
+    problemDetected = true
+    debugLabel.Text = debugLabel.Text .. "\n🔄 Voorbereiden veilige teleport..."
+    
+    -- Anchoor character parts om te voorkomen dat ze wegvliegen
+    local character = player.Character
+    if character then
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Anchored = true
+            end
+        end
+        debugLabel.Text = debugLabel.Text .. "\n🔒 Character parts geankerd"
+    end
+    
+    -- Wacht even voor stabiliteit
+    task.wait(2)
+    
+    -- Probeer te teleporten met error handling
+    local success, errorMessage = pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, currentJobId, player)
+    end)
+    
+    if success then
+        debugLabel.Text = debugLabel.Text .. "\n✅ Teleport gestart..."
+    else
+        debugLabel.Text = debugLabel.Text .. "\n❌ Teleport mislukt: " .. tostring(errorMessage)
+    end
+end
+
+-- Rejoin functie met safeTeleport
+local function rejoinServer()
+    if not debugLabel then return end
+    
+    -- Check exclusion list
+    if isPlayerExcluded() then
+        debugLabel.Text = debugLabel.Text .. "\n🚫 Rejoin geblokkeerd - Excluded user: " .. player.Name
+        return
+    end
+    
+    -- Check of het een normale respawn is
+    if normalRespawnDetected or isRespawning then
+        debugLabel.Text = debugLabel.Text .. "\n⏳ Respawning - geen rejoin nodig"
+        normalRespawnDetected = false
+        return
+    end
+    
+    debugLabel.Text = debugLabel.Text .. "\n🔄 Server rejoinen wegens probleem..."
+    safeTeleport()
+end
+
+-- Check voor echte problemen (niet normale respawn)
+local function checkForRealProblems(character)
+    if not debugLabel then return false end
+    
+    local root = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    
+    -- Als humanoid dood is, is het een normale respawn
+    if humanoid and humanoid.Health <= 0 then
+        debugLabel.Text = debugLabel.Text .. "\n💀 Character is dood - normale respawn (" .. RESPAWN_WAIT_TIME .. "s wachten)"
+        normalRespawnDetected = true
+        return false
+    end
+    
+    if not root then
+        -- Wacht langer om te zien of het een normale respawn is (12 seconden)
+        debugLabel.Text = debugLabel.Text .. "\n⏳ Geen RootPart - wacht " .. RESPAWN_WAIT_TIME .. "s voor respawn..."
+        task.wait(RESPAWN_WAIT_TIME)
+        
+        -- Check opnieuw na wachten
+        root = character:FindFirstChild("HumanoidRootPart")
+        humanoid = character:FindFirstChildOfClass("Humanoid")
+        
+        -- Als humanoid nog steeds dood is of root nog steeds mist, check verder
+        if not root and humanoid and humanoid.Health > 0 then
+            debugLabel.Text = debugLabel.Text .. "\n⚠️ Geen HumanoidRootPart na " .. RESPAWN_WAIT_TIME .. "s - Probleem gedetecteerd!"
+            return true
+        elseif not root then
+            debugLabel.Text = debugLabel.Text .. "\n⏳ Geen RootPart maar humanoid ook dood - normale respawn"
+            normalRespawnDetected = true
+            return false
+        else
+            debugLabel.Text = debugLabel.Text .. "\n✅ RootPart geladen na respawn wachttijd"
+            return false
         end
     end
     
-    return http_request_function(options)
+    -- Check of character vastzit (geankerd voor lange tijd) - alleen als niet dood
+    if root and root.Anchored and humanoid and humanoid.Health > 0 then
+        task.wait(3) -- Wacht om te zien of het tijdelijk is
+        if root.Anchored then
+            debugLabel.Text = debugLabel.Text .. "\n⚠️ Character vast (geankerd) - Probleem!"
+            return true
+        end
+    end
+    
+    return false
 end
 
-------------------------------------------------------------
--- 🔧 FIXED: POST to Discord using custom HTTP
-------------------------------------------------------------
-local function postToDiscord(payload)
-    local success, result = pcall(function()
-        local response = http_request({
-            Url = webhookURL,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json"
-            },
-            Body = game:GetService("HttpService"):JSONEncode(payload)
-        })
-        return response
-    end)
-
-    if success then
-        print("✅ Webhook sent successfully!")
-        return true
+-- Analysefunctie
+local function analyzeCharacter(character)
+    if not debugLabel then return end
+    
+    isRespawning = false
+    problemDetected = false
+    normalRespawnDetected = false
+    
+    local report = {}
+    
+    -- Toon exclusion status
+    if isPlayerExcluded() then
+        table.insert(report, "🚫 EXCLUSION MODE - Geen auto-rejoin")
     else
-        warn("❌ Webhook failed: " .. tostring(result))
-        return false
+        table.insert(report, "✅ Auto-rejoin actief")
     end
-end
+    
+    table.insert(report, "✅ Character: " .. character.Name)
 
-------------------------------------------------------------
--- 💬 Helper: Send a Discord Embed
-------------------------------------------------------------
-local function sendEmbedToDiscord(title, description, fields, color, avatarURL)
-    if not webhookURL or webhookURL == "" then
-        warn("❌ Webhook URL not set properly!")
-        return false
-    end
-
-    local data = {
-        username = "Game Logger",
-        avatar_url = "https://assetdelivery.roblox.com/v1/asset?id=634466271",
-        embeds = {{
-            title = title,
-            description = description,
-            color = color or 0x00FF00,
-            thumbnail = avatarURL and { url = avatarURL } or nil,
-            fields = fields or {},
-            timestamp = DateTime.now():ToIsoDate(),
-            footer = { text = "Round: " .. tostring(rounds) }
-        }}
-    }
-
-    return postToDiscord(data)
-end
-
-------------------------------------------------------------
--- 🔄 Round End Event with Top Killer
-------------------------------------------------------------
-local function sendRoundEnd(topKiller, topKills, playersTable)
-    rounds += 1
-    print("🏁 Round " .. rounds .. " ended - Top killer: " .. tostring(topKiller) .. " with " .. tostring(topKills) .. " kills")
-
-    local players = Players:GetPlayers()
-    local playerInfo = {}
-
-    for _, player in ipairs(players) do
-        table.insert(playerInfo, player.Name .. " (ID: " .. player.UserId .. ")")
+    -- Check eerst op HumanoidRootPart met vertraging voor respawns
+    local root = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    
+    if humanoid and humanoid.Health <= 0 then
+        table.insert(report, "💀 Character dood - respawn in " .. RESPAWN_WAIT_TIME .. "s")
+        normalRespawnDetected = true
+    elseif root then
+        table.insert(report, "✅ RootPart gevonden")
+        
+        -- Check of de root part geankerd is
+        if root.Anchored then
+            table.insert(report, "🔒 RootPart geankerd")
+        end
+    else
+        table.insert(report, "⏳ Geen RootPart - wacht " .. RESPAWN_WAIT_TIME .. "s...")
     end
 
-    -- Build kill breakdown
-    local killBreakdown = {}
-    if playersTable then
-        for _, playerData in pairs(playersTable) do
-            if playerData.Kills and playerData.Kills > 0 then
-                local star = playerData.Name == topKiller and " ⭐" or ""
-                table.insert(killBreakdown, playerData.Name .. ": " .. playerData.Kills .. " kills" .. star)
+    -- Andere checks (alleen als character niet dood is)
+    if humanoid and humanoid.Health > 0 then
+        local invisibleParts = 0
+        local localTransparencyParts = 0
+        
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                if part.Transparency == 1 then
+                    invisibleParts += 1
+                end
+                if part.LocalTransparencyModifier == 1 then
+                    localTransparencyParts += 1
+                end
             end
         end
-    end
-
-    local fields = {
-        { name = "🎯 Round Number", value = "**" .. rounds .. "**", inline = true },
-        { name = "👥 Players Online", value = tostring(#players) .. "/10", inline = true },
-        { name = "🏆 Top Killer", value = topKiller and ("**" .. topKiller .. "**") or "No kills", inline = true },
-        { name = "🔫 Total Kills", value = topKiller and ("**" .. topKills .. " kills**") or "0", inline = true }
-    }
-
-    -- Add kill breakdown if available
-    if #killBreakdown > 0 then
-        table.insert(fields, { name = "📊 Kill Breakdown", value = table.concat(killBreakdown, "\n"), inline = false })
-    end
-
-    -- Add current players
-    table.insert(fields, { name = "📋 Players in Server", value = #playerInfo > 0 and table.concat(playerInfo, "\n") or "No players online", inline = false })
-
-    local title = "🏁 Round " .. rounds .. " Completed"
-    local description = topKiller and ("**" .. topKiller .. "** dominated with " .. topKills .. " kills!") or "Round completed with no kills."
-
-    sendEmbedToDiscord(title, description, fields, 0xFFA500) -- Orange color for round end
-end
-
-------------------------------------------------------------
--- 🟢 Server Start
-------------------------------------------------------------
-local function sendServerStatus()
-    print("🟢 Sending server status...")
-    local players = Players:GetPlayers()
-    local playerInfo = {}
-
-    for _, player in ipairs(players) do
-        table.insert(playerInfo, player.Name .. " (ID: " .. player.UserId .. ")")
-    end
-
-    local fields = {
-        { name = "🟢 Server Status", value = "Online", inline = true },
-        { name = "👥 Players Online", value = tostring(#players) .. "/10", inline = true },
-        { name = "📋 Current Players", value = #playerInfo > 0 and table.concat(playerInfo, "\n") or "No players online", inline = false }
-    }
-
-    sendEmbedToDiscord("🟢 Server Started", "Game server is now online!", fields, 0x00FF00)
-end
-
-------------------------------------------------------------
--- 👤 Player Join (SIMPLIFIED - no avatars to avoid HTTP issues)
-------------------------------------------------------------
-Players.PlayerAdded:Connect(function(player)
-    print("🎉 Player joined: " .. player.Name)
-    playerJoinTimes[player.UserId] = os.time()
-
-    local fields = {
-        { name = "👤 Username", value = player.Name, inline = true },
-        { name = "🆔 User ID", value = tostring(player.UserId), inline = true },
-        { name = "📅 Account Age", value = tostring(player.AccountAge) .. " days", inline = true },
-        { name = "👥 Total Players", value = tostring(#Players:GetPlayers()) .. "/10", inline = true }
-    }
-
-    sendEmbedToDiscord("🎉 " .. player.Name .. " joined the game!", "Welcome to the server!", fields, 0x00FF00)
-end)
-
-------------------------------------------------------------
--- 👋 Player Leave (SIMPLIFIED)
-------------------------------------------------------------
-Players.PlayerRemoving:Connect(function(player)
-    print("👋 Player left: " .. player.Name)
-    local joinTime = playerJoinTimes[player.UserId] or os.time()
-    local timeSpent = os.time() - joinTime
-    local minutes = math.floor(timeSpent / 60)
-    playerJoinTimes[player.UserId] = nil
-
-    local fields = {
-        { name = "👤 Username", value = player.Name, inline = true },
-        { name = "🆔 User ID", value = tostring(player.UserId), inline = true },
-        { name = "📅 Account Age", value = tostring(player.AccountAge) .. " days", inline = true },
-        { name = "⏰ Time Spent", value = tostring(minutes) .. " minutes", inline = true },
-        { name = "👥 Players Left", value = tostring(#Players:GetPlayers() - 1) .. "/10", inline = true }
-    }
-
-    sendEmbedToDiscord("👋 " .. player.Name .. " left the game", "Player has disconnected.", fields, 0xFF0000)
-end)
-
-------------------------------------------------------------
--- 🎯 MAIN: Detect Match Results and Top Killer
-------------------------------------------------------------
-game.ReplicatedStorage.Remotes.ShowMR.OnClientEvent:Connect(function(_, _, _, _, _, _, _, playersTable)
-    -- ^ the 8th parameter (playersTable) is the list of players shown on the match results
-    if typeof(playersTable) ~= "table" then
-        warn("⚠️ MatchResults: No valid players table found")
-        return
-    end
-
-    local topKiller = nil
-    local topKills = -1
-
-    -- Loop through all players in the results
-    for _, playerData in pairs(playersTable) do
-        if playerData.Kills and playerData.Kills > topKills then
-            topKiller = playerData.Name
-            topKills = playerData.Kills
+        
+        if invisibleParts > 0 then
+            table.insert(report, "🕵️ " .. invisibleParts .. " onzichtbare parts")
+        end
+        
+        if localTransparencyParts > 0 then
+            table.insert(report, "👻 " .. localTransparencyParts .. " local transparency parts")
         end
     end
 
-    if topKiller then
-        print(string.format("🏆 Top killer: %s (%d kills)", topKiller, topKills))
-        -- Send round end webhook with top killer info
-        sendRoundEnd(topKiller, topKills, playersTable)
-    else
-        print("⚠️ No top killer found in this round")
-        -- Send round end webhook with no killer info
-        sendRoundEnd(nil, 0, playersTable)
-    end
-end)
-
-------------------------------------------------------------
--- 🔍 Detect Round Start (LOAD PROGRESS)
-------------------------------------------------------------
-LogService.MessageOut:Connect(function(message)
-    print("📝 Log detected: " .. message)
-    if message:find("LOAD PROGRESS") then
-        print("✅ LOAD PROGRESS detected - Round starting soon...")
-        -- We don't send webhook here anymore, we wait for match results
-    end
-end)
-
-------------------------------------------------------------
--- 🚀 TEST FUNCTION: Simple test
-------------------------------------------------------------
-local function testWebhook()
-    print("🧪 Testing webhook manually...")
-    local testFields = {
-        { name = "🧪 Test", value = "Webhook test successful!", inline = true },
-        { name = "🎯 Test Killer", value = "TestPlayer: 5 kills ⭐", inline = true }
-    }
-    sendEmbedToDiscord("🧪 Webhook Test", "Testing connection to Discord with killer data", testFields, 0x9932CC)
+    debugLabel.Text = table.concat(report, "\n")
+    
+    -- Start probleemdetectie na langere delay (alleen als niet geëxcludeerd en niet dood)
+    task.delay(PROBLEM_CHECK_DELAY, function()
+        if character and character.Parent then
+            local currentHumanoid = character:FindFirstChildOfClass("Humanoid")
+            if currentHumanoid and currentHumanoid.Health > 0 then -- Alleen checken als character levend is
+                if checkForRealProblems(character) then
+                    rejoinServer()
+                else
+                    debugLabel.Text = debugLabel.Text .. "\n✅ Character OK - geen rejoin nodig"
+                end
+            else
+                debugLabel.Text = debugLabel.Text .. "\n💀 Character dood - wacht op respawn"
+            end
+        end
+    end)
 end
 
-------------------------------------------------------------
--- 🚀 Initialization
-------------------------------------------------------------
-print("🔧 Starting Discord webhook system with kill tracking...")
+-- Verbeterde character monitoring
+local function monitorCharacter(character)
+    if not character or not debugLabel then 
+        print("❌ No character or debugLabel to monitor")
+        return 
+    end
+    
+    print("🎮 Starting character monitoring...")
+    
+    -- Uitgebreide analyse
+    analyzeCharacter(character)
+    
+    -- Continue monitoring voor humanoid health
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+            if humanoid.Health <= 0 then
+                debugLabel.Text = debugLabel.Text .. "\n💀 Character gedood - respawn in " .. RESPAWN_WAIT_TIME .. "s"
+                normalRespawnDetected = true
+                isRespawning = true
+                
+                -- Reset de respawn flag na de respawn tijd
+                task.delay(RESPAWN_WAIT_TIME + 2, function()
+                    isRespawning = false
+                end)
+            else
+                isRespawning = false
+                normalRespawnDetected = false
+            end
+        end)
+    end
+    
+    -- Continue monitoring voor verdwijning van HumanoidRootPart (alleen na initiële load)
+    local rootPart = character:WaitForChild("HumanoidRootPart", 5)
+    if rootPart then
+        -- Monitor of de root part verdwijnt (niet tijdens respawn)
+        local connection
+        connection = rootPart:GetPropertyChangedSignal("Parent"):Connect(function()
+            if not rootPart.Parent or rootPart.Parent ~= character then
+                if not normalRespawnDetected and not isRespawning then
+                    debugLabel.Text = debugLabel.Text .. "\n⚠️ HumanoidRootPart verwijderd (geen respawn)!"
+                    connection:Disconnect()
+                    task.wait(RESPAWN_WAIT_TIME) -- Lange wachttijd voor respawn bevestiging
+                    if not character:FindFirstChild("HumanoidRootPart") then
+                        rejoinServer()
+                    end
+                end
+            end
+        end)
+    else
+        print("⚠️ No HumanoidRootPart found initially")
+    end
+end
 
--- Simple startup - no waiting for players
-task.delay(5, function()
-    sendServerStatus()
+-- Verbeterde hoofd initialisatie functie
+local function initializeScript()
+    print("🚀 Starting Debug Panel Script...")
+    
+    -- Check of player bestaat
+    if not player then
+        print("❌ Player not found, waiting...")
+        player = Players.LocalPlayer
+        if not player then
+            player = Players.PlayerAdded:Wait()
+        end
+    end
+    
+    print("✅ Player found: " .. player.Name)
+    
+    -- Wacht op character
+    if not player.Character then
+        print("⏳ Waiting for character...")
+        player.CharacterAdded:Wait()
+        task.wait(3) -- Langere wachttijd voor character initialisatie
+    end
+    
+    print("✅ Character loaded")
+    
+    -- Maak GUI aan
+    debugLabel = createGUI()
+    
+    if not debugLabel then
+        warn("❌ Failed to create GUI on first attempt")
+        -- Probeer nog 1 keer na korte delay
+        task.wait(2)
+        debugLabel = createGUI()
+    end
+    
+    if debugLabel then
+        print("🎉 GUI successfully created!")
+        
+        -- Start monitoring
+        monitorCharacter(player.Character)
+        
+        -- Luister naar nieuwe characters
+        player.CharacterAdded:Connect(function(char)
+            print("🎮 New character detected")
+            debugLabel.Text = debugLabel.Text .. "\n🎮 Nieuwe character gedetecteerd..."
+            task.wait(2) -- Wacht even voor alles geladen is
+            monitorCharacter(char)
+        end)
+
+        -- Character removing - markeer als respawn
+        player.CharacterRemoving:Connect(function()
+            isRespawning = true
+            normalRespawnDetected = true
+            debugLabel.Text = debugLabel.Text .. "\n💀 Character verwijderd - respawn in " .. RESPAWN_WAIT_TIME .. "s..."
+            
+            -- Reset de respawn flag na de respawn tijd
+            task.delay(RESPAWN_WAIT_TIME + 2, function()
+                isRespawning = false
+                normalRespawnDetected = false
+            end)
+        end)
+
+        -- Extra safety check elke 45 seconden (minder agressief)
+        task.spawn(function()
+            while true do
+                task.wait(45)
+                if player.Character and not normalRespawnDetected and not isRespawning then
+                    local root = player.Character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                    
+                    -- Alleen checken als character levend is
+                    if humanoid and humanoid.Health > 0 and not root then
+                        -- Alleen rejoinen als het geen recente respawn is
+                        task.wait(RESPAWN_WAIT_TIME) -- Lange wachttijd voor respawn bevestiging
+                        if player.Character and not player.Character:FindFirstChild("HumanoidRootPart") then
+                            local currentHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                            if currentHumanoid and currentHumanoid.Health > 0 then
+                                debugLabel.Text = debugLabel.Text .. "\n⏰ Periodic check: Geen RootPart na " .. RESPAWN_WAIT_TIME .. "s! Veilig rejoinen..."
+                                rejoinServer()
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+
+        -- Teleport status monitoring
+        player.OnTeleport:Connect(function(teleportState)
+            if teleportState == Enum.TeleportState.Started then
+                debugLabel.Text = debugLabel.Text .. "\n🚀 Teleport gestart..."
+            elseif teleportState == Enum.TeleportState.Failed then
+                debugLabel.Text = debugLabel.Text .. "\n❌ Teleport mislukt - probeer opnieuw..."
+                task.delay(5, function()
+                    safeTeleport()
+                end)
+            end
+        end)
+        
+        print("🎉 ✅ DEBUG PANEL SCRIPT SUCCESSFULLY LOADED AND RUNNING!")
+        print("⏰ Respawn wachttijd: " .. RESPAWN_WAIT_TIME .. " seconden")
+        if isPlayerExcluded() then
+            print("🚫 Exclusion mode: " .. player.Name .. " (" .. player.UserId .. ") - Geen auto-rejoin")
+        else
+            print("✅ Auto-rejoin enabled for: " .. player.Name)
+        end
+    else
+        warn("❌ Failed to create GUI after retry")
+    end
+end
+
+-- Start het script met error handling
+local success, errorMessage = pcall(function()
+    initializeScript()
 end)
 
-task.delay(15, function()
-    testWebhook()
-end)
+if not success then
+    warn("❌ Script failed to initialize: " .. tostring(errorMessage))
+else
+    print("✅ Script initialization process completed!")
+end
 
-print("✅ Discord webhook system loaded successfully!")
-print("💡 System will track top killers from match results and send to webhook")
+    else
+        print("YOU ARE NOT WHITELISTED!")
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "NOT WHITELISTED",
+            Text = "HAHHAHAHHAHA",
+            Duration = 5
+        })
+    end
+else
+    print("⚠️ Whitelist check failed: " .. tostring(result))
+end
