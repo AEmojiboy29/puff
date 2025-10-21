@@ -2,6 +2,16 @@
 -- This listens every time MatchResults are shown
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+
+-- Player data cache
+local PlayerData = {
+	SeasonPoints = 0,
+	AllTimePoints = 0
+}
 
 -- ✅ Roblox Discord Webhook Logger (Using Custom HTTP Method)
 -- This bypasses normal HttpService restrictions
@@ -92,7 +102,7 @@ local function sendEmbedToDiscord(title, description, fields, color, avatarURL)
 end
 
 ------------------------------------------------------------
--- 🔄 Round End Event with Top Killer
+-- 🔄 Round End Event with Top Killer and Clan Points
 ------------------------------------------------------------
 local function sendRoundEnd(topKiller, topKills, playersTable)
     rounds += 1
@@ -120,7 +130,9 @@ local function sendRoundEnd(topKiller, topKills, playersTable)
         { name = "🎯 Round Number", value = "**" .. rounds .. "**", inline = true },
         { name = "👥 Players Online", value = tostring(#players) .. "/10", inline = true },
         { name = "🏆 Top Killer", value = topKiller and ("**" .. topKiller .. "**") or "No kills", inline = true },
-        { name = "🔫 Total Kills", value = topKiller and ("**" .. topKills .. " kills**") or "0", inline = true }
+        { name = "🔫 Total Kills", value = topKiller and ("**" .. topKills .. " kills**") or "0", inline = true },
+        { name = "🏅 Season Points", value = "**" .. PlayerData.SeasonPoints .. "**", inline = true },
+        { name = "⭐ All-Time Points", value = "**" .. PlayerData.AllTimePoints .. "**", inline = true }
     }
 
     -- Add kill breakdown if available
@@ -138,7 +150,7 @@ local function sendRoundEnd(topKiller, topKills, playersTable)
 end
 
 ------------------------------------------------------------
--- 🟢 Server Start
+-- 🟢 Server Start with Clan Points
 ------------------------------------------------------------
 local function sendServerStatus()
     print("🟢 Sending server status...")
@@ -152,6 +164,8 @@ local function sendServerStatus()
     local fields = {
         { name = "🟢 Server Status", value = "Online", inline = true },
         { name = "👥 Players Online", value = tostring(#players) .. "/10", inline = true },
+        { name = "🏅 Season Points", value = "**" .. PlayerData.SeasonPoints .. "**", inline = true },
+        { name = "⭐ All-Time Points", value = "**" .. PlayerData.AllTimePoints .. "**", inline = true },
         { name = "📋 Current Players", value = #playerInfo > 0 and table.concat(playerInfo, "\n") or "No players online", inline = false }
     }
 
@@ -159,7 +173,7 @@ local function sendServerStatus()
 end
 
 ------------------------------------------------------------
--- 👤 Player Join (SIMPLIFIED - no avatars to avoid HTTP issues)
+-- 👤 Player Join with Clan Points
 ------------------------------------------------------------
 Players.PlayerAdded:Connect(function(player)
     print("🎉 Player joined: " .. player.Name)
@@ -169,14 +183,16 @@ Players.PlayerAdded:Connect(function(player)
         { name = "👤 Username", value = player.Name, inline = true },
         { name = "🆔 User ID", value = tostring(player.UserId), inline = true },
         { name = "📅 Account Age", value = tostring(player.AccountAge) .. " days", inline = true },
-        { name = "👥 Total Players", value = tostring(#Players:GetPlayers()) .. "/10", inline = true }
+        { name = "👥 Total Players", value = tostring(#Players:GetPlayers()) .. "/10", inline = true },
+        { name = "🏅 My Season Points", value = "**" .. PlayerData.SeasonPoints .. "**", inline = true },
+        { name = "⭐ My All-Time Points", value = "**" .. PlayerData.AllTimePoints .. "**", inline = true }
     }
 
     sendEmbedToDiscord("🎉 " .. player.Name .. " joined the game!", "Welcome to the server!", fields, 0x00FF00)
 end)
 
 ------------------------------------------------------------
--- 👋 Player Leave (SIMPLIFIED)
+-- 👋 Player Leave with Clan Points
 ------------------------------------------------------------
 Players.PlayerRemoving:Connect(function(player)
     print("👋 Player left: " .. player.Name)
@@ -190,10 +206,46 @@ Players.PlayerRemoving:Connect(function(player)
         { name = "🆔 User ID", value = tostring(player.UserId), inline = true },
         { name = "📅 Account Age", value = tostring(player.AccountAge) .. " days", inline = true },
         { name = "⏰ Time Spent", value = tostring(minutes) .. " minutes", inline = true },
-        { name = "👥 Players Left", value = tostring(#Players:GetPlayers() - 1) .. "/10", inline = true }
+        { name = "👥 Players Left", value = tostring(#Players:GetPlayers() - 1) .. "/10", inline = true },
+        { name = "🏅 My Season Points", value = "**" .. PlayerData.SeasonPoints .. "**", inline = true },
+        { name = "⭐ My All-Time Points", value = "**" .. PlayerData.AllTimePoints .. "**", inline = true }
     }
 
     sendEmbedToDiscord("👋 " .. player.Name .. " left the game", "Player has disconnected.", fields, 0xFF0000)
+end)
+
+------------------------------------------------------------
+-- 🏅 CLAN POINTS TRACKING SYSTEM
+------------------------------------------------------------
+
+-- Update clan points data
+local function UpdateClanPoints(seasonPoints, allTimePoints)
+    PlayerData.SeasonPoints = seasonPoints or PlayerData.SeasonPoints
+    PlayerData.AllTimePoints = allTimePoints or PlayerData.AllTimePoints
+    print("🏅 Clan Points Updated - Season: " .. PlayerData.SeasonPoints .. ", All-Time: " .. PlayerData.AllTimePoints)
+end
+
+-- Listen for clan initialization data
+Remotes.ClanRemotes.InitPlayer.OnClientEvent:Connect(function(_, _, clanMembers)
+    local userId = LocalPlayer.UserId
+    for _, member in pairs(clanMembers) do
+        if member[1] == userId then
+            -- member[3] = Season Points, member[4] = All-Time Points
+            UpdateClanPoints(member[3] or 0, member[4] or 0)
+            break
+        end
+    end
+end)
+
+-- Listen for member updates
+Remotes.ClanRemotes.SendMembers.OnClientEvent:Connect(function(clanMembers)
+    local userId = LocalPlayer.UserId
+    for _, member in pairs(clanMembers) do
+        if member[1] == userId then
+            UpdateClanPoints(member[3], member[4])
+            break
+        end
+    end
 end)
 
 ------------------------------------------------------------
@@ -240,21 +292,26 @@ LogService.MessageOut:Connect(function(message)
 end)
 
 ------------------------------------------------------------
--- 🚀 TEST FUNCTION: Simple test
+-- 🚀 TEST FUNCTION: Test with Clan Points
 ------------------------------------------------------------
 local function testWebhook()
     print("🧪 Testing webhook manually...")
     local testFields = {
         { name = "🧪 Test", value = "Webhook test successful!", inline = true },
-        { name = "🎯 Test Killer", value = "TestPlayer: 5 kills ⭐", inline = true }
+        { name = "🎯 Test Killer", value = "TestPlayer: 5 kills ⭐", inline = true },
+        { name = "🏅 Season Points", value = "**" .. PlayerData.SeasonPoints .. "**", inline = true },
+        { name = "⭐ All-Time Points", value = "**" .. PlayerData.AllTimePoints .. "**", inline = true }
     }
-    sendEmbedToDiscord("🧪 Webhook Test", "Testing connection to Discord with killer data", testFields, 0x9932CC)
+    sendEmbedToDiscord("🧪 Webhook Test", "Testing connection to Discord with killer data and clan points", testFields, 0x9932CC)
 end
 
 ------------------------------------------------------------
 -- 🚀 Initialization
 ------------------------------------------------------------
-print("🔧 Starting Discord webhook system with kill tracking...")
+print("🔧 Starting Discord webhook system with kill tracking and clan points...")
+
+-- Initialize clan points
+UpdateClanPoints(0, 0)
 
 -- Simple startup - no waiting for players
 task.delay(5, function()
@@ -266,4 +323,5 @@ task.delay(15, function()
 end)
 
 print("✅ Discord webhook system loaded successfully!")
-print("💡 System will track top killers from match results and send to webhook")
+print("💡 System will track top killers from match results and clan points")
+print("🏅 Current Clan Points - Season: " .. PlayerData.SeasonPoints .. ", All-Time: " .. PlayerData.AllTimePoints)
