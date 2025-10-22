@@ -184,8 +184,6 @@ Players.PlayerAdded:Connect(function(player)
         { name = "🆔 User ID", value = tostring(player.UserId), inline = true },
         { name = "📅 Account Age", value = tostring(player.AccountAge) .. " days", inline = true },
         { name = "👥 Total Players", value = tostring(#Players:GetPlayers()) .. "/10", inline = true },
-        { name = "🏅 My Season Points", value = "**" .. PlayerData.SeasonPoints .. "**", inline = true },
-        { name = "⭐ My All-Time Points", value = "**" .. PlayerData.AllTimePoints .. "**", inline = true }
     }
 
     sendEmbedToDiscord("🎉 " .. player.Name .. " joined the game!", "Welcome to the server!", fields, 0x00FF00)
@@ -207,8 +205,6 @@ Players.PlayerRemoving:Connect(function(player)
         { name = "📅 Account Age", value = tostring(player.AccountAge) .. " days", inline = true },
         { name = "⏰ Time Spent", value = tostring(minutes) .. " minutes", inline = true },
         { name = "👥 Players Left", value = tostring(#Players:GetPlayers() - 1) .. "/10", inline = true },
-        { name = "🏅 My Season Points", value = "**" .. PlayerData.SeasonPoints .. "**", inline = true },
-        { name = "⭐ My All-Time Points", value = "**" .. PlayerData.AllTimePoints .. "**", inline = true }
     }
 
     sendEmbedToDiscord("👋 " .. player.Name .. " left the game", "Player has disconnected.", fields, 0xFF0000)
