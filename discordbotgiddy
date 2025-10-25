@@ -10,7 +10,7 @@ end
 local userId = player.UserId
 
 -- ⚠️ CHANGE THIS TO YOUR ACTUAL USER ID
-local ALLOWED_USER_ID = 94961392217-- Replace with your User ID
+local ALLOWED_USER_ID = 9496139217-- Replace with your User ID
 
 -- Check if current user is authorized
 if userId ~= ALLOWED_USER_ID then
