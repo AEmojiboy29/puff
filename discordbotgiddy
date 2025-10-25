@@ -40,7 +40,7 @@ local PlayerData = {
 local LogService = game:GetService("LogService")
 
 -- Your Discord Webhook URL
-local webhookURL = "https://discordapp.com/api/webhooks/1431204801718521918/Ws86QA9GiOEiM_9PK7M8mQp_77jOmWAFzN3xwrqQFZsxZLc6fgfE9jttt-Yis0nbuAlG"
+local webhookURL = "https://discordapp.com/api/webhooks/1431564697559240887/wrpKrXrlktdQHmXj7G6hGNAFwesM6j0BB4eKVafqCHwpw8_YD8QtUCWQqzT7Qcc1Se72"
 
 -- Track player join times
 local playerJoinTimes = {}
