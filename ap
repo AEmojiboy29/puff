@@ -1,7 +1,6 @@
---// Radeon Autofarm (Auto-start)
+--// Radeon Autofarm (Auto-start, Classic Only)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
@@ -37,89 +36,22 @@ end)
 getgenv().NewAutofarm = true
 Notify("Autofarm", "Enabled", 2)
 
---=== Start of Radeon autofarm logic ===--
+--=== Autofarm logic (Classic only) ===--
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local ScreenGui = PlayerGui:WaitForChild("ScreenGui")
 local UI = ScreenGui:WaitForChild("UI")
 local TargetLabel = UI:WaitForChild("Target")
 local TargetText = TargetLabel:WaitForChild("TargetText")
 
-local GameModeLabel = UI:WaitForChild("textD"):WaitForChild("Gamemode"):WaitForChild("textD")
-
 local targetChar = nil
 local targetHRP = nil
 local attacking = false
 local waitingForRound = false
-local gameMode = "Classic"
-
-GameModeLabel:GetPropertyChangedSignal("Text"):Connect(function()
-    gameMode = GameModeLabel.Text
-end)
 
 local function getTargetByUI()
     if TargetLabel.Visible and TargetText.Text ~= "" then
         return Players:FindFirstChild(TargetText.Text)
     end
-end
-
-local function getClosestTarget()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            local char = workspace:FindFirstChild(plr.Name)
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                if (LobbyPos - char.HumanoidRootPart.Position).Magnitude > 300 then
-                    return char
-                end
-            end
-        end
-    end
-    return nil
-end
-
-local function getGameModeTarget(isZombie, opposite)
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            local char = workspace:FindFirstChild(plr.Name)
-            if char and char:FindFirstChild("Torso") then
-                local hasZombie = char.Torso:FindFirstChild("zombbox")
-                if isZombie and hasZombie then
-                    return char
-                elseif not isZombie and not hasZombie and opposite then
-                    return char
-                end
-            end
-        end
-    end
-    return nil
-end
-
-local function resolveTarget()
-    if gameMode == "Classic" and TargetLabel.Visible then
-        local uiTarget = getTargetByUI()
-        if uiTarget then
-            return workspace:FindFirstChild(uiTarget.Name)
-        end
-    end
-    if gameMode == "Free For All" then
-        return getClosestTarget()
-    end
-    if gameMode == "Juggernaut" then
-        local isZombie = Character and Character:FindFirstChild("Torso") and Character.Torso:FindFirstChild("zombbox")
-        if isZombie then
-            return getClosestTarget()
-        else
-            return getGameModeTarget(false, false)
-        end
-    end
-    if gameMode == "Infection" then
-        local isZombie = Character and Character:FindFirstChild("Torso") and Character.Torso:FindFirstChild("zombbox")
-        if isZombie then
-            return getGameModeTarget(true, true)
-        else
-            return getGameModeTarget(true, false)
-        end
-    end
-    return nil
 end
 
 RunService.RenderStepped:Connect(function()
@@ -128,7 +60,7 @@ RunService.RenderStepped:Connect(function()
 
     local dist = (LobbyPos - HRP.Position).Magnitude
 
-    if dist > 300 and not waitingForRound and gameMode == "Classic" then
+    if dist > 300 and not waitingForRound then
         task.wait(9.5)
         waitingForRound = true
     elseif dist < 300 then
@@ -144,7 +76,9 @@ RunService.RenderStepped:Connect(function()
     end
 
     if dist > 300 then
-        targetChar = resolveTarget()
+        local uiTarget = getTargetByUI()
+        targetChar = uiTarget and workspace:FindFirstChild(uiTarget.Name) or nil
+
         if targetChar then
             targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
             if targetHRP then
