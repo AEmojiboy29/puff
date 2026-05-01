@@ -92,7 +92,7 @@ RunService.RenderStepped:Connect(function()
                     if hitCheck and hitCheck:FindFirstChild("HitCheck") then
                         hitCheck.HitCheck:Fire(targetChar)
                     end
-                    task.wait(1)
+                    task.wait(1.2)
                     attacking = false
                 end
             end
